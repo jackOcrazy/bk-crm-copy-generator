@@ -1,0 +1,116 @@
+{
+  "brand": "Burger King",
+  "region": ["Chile", "Argentina"],
+  "personality": [
+    "enthusiastic",
+    "confident",
+    "playful",
+    "lightly irreverent",
+    "foodie"
+  ],
+  "tone": [
+    "short",
+    "direct",
+    "playful",
+    "tempting",
+    "energetic",
+    "craving-driven"
+  ],
+  "energy": [
+    "hunger",
+    "indulgence",
+    "temptation",
+    "enjoyment",
+    "flame-grilled intensity"
+  ],
+  "food_vocabulary": [
+    "combo",
+    "burger",
+    "whopper",
+    "crispy",
+    "pollo",
+    "papas",
+    "nuggets",
+    "parrilla",
+    "fuego",
+    "queso",
+    "bacon",
+    "salsa",
+    "sabor",
+    "king"
+  ],
+  "crm_expressions": [
+    "tu break tiene",
+    "ese antojo",
+    "hoy pinta",
+    "hora de",
+    "dale",
+    "llegó",
+    "te espera",
+    "pide"
+  ],
+  "allowed_emojis": ["🍔", "🍟", "🍗", "🔥", "👑", "🤤"],
+  "emoji_rules": {
+    "max_per_message": 2,
+    "recommended": 1
+  },
+  "cta_style": [
+    "pedir",
+    "probar",
+    "morder",
+    "disfrutar",
+    "descubrir"
+  ],
+  "prohibited_words": [
+    "estimado",
+    "cliente",
+    "adquiere",
+    "promoción válida",
+    "oferta disponible",
+    "compra ahora",
+    "obtén"
+  ],
+  "general_rules": [
+    "food first",
+    "short phrases",
+    "single main idea",
+    "colloquial language",
+    "high impact",
+    "craving focus"
+  ],
+  "channels": {
+    "push": {
+      "max_chars": 60,
+      "min_chars": 30,
+      "structure": "single_line",
+      "cta": "implicit",
+      "emoji_allowed": true
+    },
+    "inapp": {
+      "title_words_max": 5,
+      "body_words_max": 10,
+      "cta_required": true,
+      "emoji_allowed": true
+    },
+    "slideup": {
+      "title_words_max": 5,
+      "body_words_max": 10,
+      "cta_required": true,
+      "emoji_allowed": true
+    }
+  },
+  "regional_adaptation": {
+    "Chile": {
+      "formality": "tu",
+      "style": "direct",
+      "energy": "moderate",
+      "notes": "clear promo tone"
+    },
+    "Argentina": {
+      "formality": "tu",
+      "style": "expressive",
+      "energy": "high",
+      "notes": "more enthusiastic wording"
+    }
+  }
+}
