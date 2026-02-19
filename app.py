@@ -10,7 +10,7 @@ from openai import OpenAI
 with open("brand_packs/bk_brand_pack.json", "r", encoding="utf-8") as f:
     brand_pack = json.load(f)
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 # =========================
 # REGIONAL STYLE
@@ -207,4 +207,5 @@ if st.button("Generar copys"):
 
     # Raw output (optional debug view)
     with st.expander("Ver salida completa (raw)"):
+
         st.text(result)
