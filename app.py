@@ -1,6 +1,5 @@
 import streamlit as st
 import json
-import os
 import re
 from openai import OpenAI
 
@@ -28,6 +27,20 @@ Use Chilean Spanish.
 Direct promo tone.
 Avoid overly formal language.
 """
+
+# =========================
+# SEGMENT INTENT
+# =========================
+def segment_intent(segment):
+    if segment == "Reactivación":
+        return "User inactive >9 weeks. Goal: bring back with craving and nostalgia."
+    if segment == "Churned":
+        return "User cooling (5–9 weeks). Goal: remind value and trigger return."
+    if segment == "New":
+        return "Registered but never ordered. Goal: first purchase motivation."
+    if segment == "Retained":
+        return "Active last 4 weeks. Goal: maintain frequency and loyalty."
+    return ""
 
 # =========================
 # CHANNEL FORMAT RULES
@@ -58,7 +71,7 @@ No body.
 # =========================
 # COPY GENERATION
 # =========================
-def generate_bk_copy(country, channel, campaign_type, campaign_context, product, price, n=3):
+def generate_bk_copy(country, channel, campaign_type, campaign_context, product, price, segment=None, n=3):
     brand = brand_pack["brand"]
     tone = ", ".join(brand_pack["tone"])
     vocab = ", ".join(brand_pack["food_vocabulary"])
@@ -68,11 +81,24 @@ def generate_bk_copy(country, channel, campaign_type, campaign_context, product,
     region_style = regional_flavor(country)
     format_rules = channel_format(channel)
 
+    # Segment block
+    segment_block = ""
+    if segment:
+        intent = segment_intent(segment)
+        segment_block = f"""
+User segment: {segment}
+
+CRM objective:
+{intent}
+
+Adapt tone and persuasion to this lifecycle stage.
+"""
+
     # Optional fields
     product_text = f"Product (optional): {product}" if product else "Product (optional): (none)"
     price_text = f"Price (optional): {price}" if price else "Price (optional): (none)"
 
-    # Theme block that truly influences output
+    # Theme block
     theme_block = ""
     if campaign_context and campaign_context.strip():
         theme_block = f"""
@@ -81,7 +107,7 @@ Campaign theme/context: {campaign_context}
 Creative direction (MANDATORY):
 - The copy MUST clearly reflect this theme in mood, wording, references or atmosphere.
 - Make it feel like a crossover: Burger King x {campaign_context}.
-- Keep BK voice, but adapt to the theme genre (horror/fantasy/festive/etc.).
+- Keep BK voice, but adapt to the theme genre.
 """
 
     prompt = f"""
@@ -93,6 +119,8 @@ Brand base tone: {tone}
 Brand vocabulary: {vocab}
 Brand expressions: {expressions}
 Allowed emojis: {emojis}
+
+{segment_block}
 
 Campaign type: {campaign_type}
 
@@ -122,10 +150,9 @@ Output rules:
     return response.output_text
 
 # =========================
-# PARSER (to show pretty cards)
+# PARSER
 # =========================
 def parse_options(text: str):
-    # Splits by "Option X:" blocks
     pattern = r"(Option\s+[123]:)(.*?)(?=(Option\s+[123]:)|\Z)"
     matches = re.findall(pattern, text, flags=re.DOTALL | re.IGNORECASE)
 
@@ -147,7 +174,6 @@ def parse_options(text: str):
 
         options.append({"raw": block, "title": title, "body": body, "cta": cta})
 
-    # fallback: if model didn't follow structure, show whole thing as one block
     if not options:
         options = [{"raw": text.strip(), "title": "", "body": "", "cta": ""}]
 
@@ -161,6 +187,14 @@ st.title("🍔 BK CRM Copy Generator")
 
 country = st.selectbox("País", ["Chile", "Argentina"])
 channel = st.selectbox("Canal", ["push", "inapp", "slideup"])
+
+# Segment selector only for push
+segment = None
+if channel == "push":
+    segment = st.selectbox(
+        "Segmento usuario",
+        ["Reactivación", "Churned", "New", "Retained"]
+    )
 
 campaign_type = st.selectbox(
     "Tipo campaña",
@@ -187,12 +221,20 @@ price = st.text_input("Precio (opcional)", "")
 
 if st.button("Generar copys"):
     with st.spinner("Generando copys BK..."):
-        result = generate_bk_copy(country, channel, campaign_type, campaign_context, product, price, n=3)
+        result = generate_bk_copy(
+            country,
+            channel,
+            campaign_type,
+            campaign_context,
+            product,
+            price,
+            segment=segment,
+            n=3
+        )
 
     st.subheader("Resultados")
     options = parse_options(result)
 
-    # Show pretty cards for each option
     for i, opt in enumerate(options, start=1):
         with st.container(border=True):
             st.markdown(f"### Opción {i}")
@@ -205,7 +247,5 @@ if st.button("Generar copys"):
             if not (opt["title"] or opt["body"] or opt["cta"]):
                 st.text(opt["raw"])
 
-    # Raw output (optional debug view)
     with st.expander("Ver salida completa (raw)"):
-
         st.text(result)
