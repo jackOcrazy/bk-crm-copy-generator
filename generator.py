@@ -12,15 +12,13 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 # SEGMENT INTENT
 # =========================
 def segment_intent(segment):
-    if segment == "Reactivación":
-        return "User inactive >9 weeks. Goal: bring back with craving and nostalgia."
-    if segment == "Churned":
-        return "User cooling (5–9 weeks). Goal: remind value and trigger return."
-    if segment == "New":
-        return "Registered but never ordered. Goal: first purchase motivation."
-    if segment == "Retained":
-        return "Active last 4 weeks. Goal: maintain frequency and loyalty."
-    return ""
+    intents = {
+        "Reactivación": "User inactive >9 weeks. Goal: bring back with craving and nostalgia.",
+        "Churned": "User cooling (5–9 weeks). Goal: remind value and trigger return.",
+        "New": "Registered but never ordered. Goal: first purchase motivation.",
+        "Retained": "Active last 4 weeks. Goal: maintain frequency and loyalty."
+    }
+    return intents.get(segment, "")
 
 # =========================
 # GENERATE COPY
@@ -34,7 +32,7 @@ def generate_bk_copy(
     price="",
     objective="promo",
     segment=None,
-    n=5
+    n=3
 ):
     brand = brand_pack["brand"]
     tone = ", ".join(brand_pack["tone"])
@@ -45,20 +43,73 @@ def generate_bk_copy(
     channel_rules = brand_pack["channels"][channel]
     regional = brand_pack["regional_adaptation"][country]
 
-    # Segment block
-    segment_block = ""
-    if segment:
-        intent = segment_intent(segment)
-        segment_block = f"""
-User segment: {segment}
+    # =========================
+    # MULTI SEGMENT MODE
+    # =========================
+    if segment == "Todos":
+        segment_list = ["Reactivación", "Churned", "New", "Retained"]
 
-CRM objective:
-{intent}
-
-Adapt tone and persuasion to this lifecycle stage.
+        segment_prompt = ""
+        for seg in segment_list:
+            intent = segment_intent(seg)
+            segment_prompt += f"""
+SEGMENT: {seg}
+CRM objective: {intent}
+Write copy adapted to this lifecycle stage.
 """
 
-    prompt = f"""
+        prompt = f"""
+You are a CRM copywriter for {brand} in {country}.
+
+Brand tone: {tone}
+Vocabulary: {vocab}
+Expressions: {expressions}
+Allowed emojis: {emojis}
+
+Regional style: {regional['style']}, energy {regional['energy']}
+
+Channel: {channel}
+Rules: {channel_rules}
+
+Campaign type: {campaign_type}
+Campaign name: {campaign_name}
+Product: {product}
+Price: {price}
+Objective: {objective}
+
+Generate CRM copy for EACH segment below.
+
+{segment_prompt}
+
+Output format:
+Segment: Reactivación
+Title:
+Body:
+
+Segment: Churned
+Title:
+Body:
+
+Segment: New
+Title:
+Body:
+
+Segment: Retained
+Title:
+Body:
+"""
+    else:
+        # Single segment
+        segment_block = ""
+        if segment:
+            intent = segment_intent(segment)
+            segment_block = f"""
+User segment: {segment}
+CRM objective: {intent}
+Adapt tone to lifecycle stage.
+"""
+
+        prompt = f"""
 You are a CRM copywriter for {brand} in {country}.
 
 Brand tone: {tone}
@@ -79,7 +130,7 @@ Product: {product}
 Price: {price}
 Objective: {objective}
 
-Generate {n} CRM copy options following brand voice, channel rules and lifecycle intent.
+Generate {n} CRM copy options following brand voice and channel rules.
 Return each option on a new line.
 """
 
@@ -89,17 +140,3 @@ Return each option on a new line.
     )
 
     return response.output_text
-
-
-if __name__ == "__main__":
-    result = generate_bk_copy(
-        country="Chile",
-        channel="push",
-        campaign_type="promo",
-        product="Combo Crispy",
-        price="$4.990",
-        objective="promo",
-        segment="Reactivación"
-    )
-
-    print(result)
