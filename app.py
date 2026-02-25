@@ -65,6 +65,15 @@ CTA (max 3 words)
 No body.
 """
 
+def channel_fields(channel):
+    if channel == "push":
+        return {"title": True, "body": True, "cta": False}
+    if channel == "inapp":
+        return {"title": True, "body": True, "cta": True}
+    if channel == "slideup":
+        return {"title": True, "body": False, "cta": True}
+    return {"title": True, "body": True, "cta": True}
+
 # =========================
 # COPY GENERATION
 # =========================
@@ -78,7 +87,6 @@ def generate_bk_copy(country, channel, campaign_type, campaign_context, product,
     region_style = regional_flavor(country)
     format_rules = channel_format(channel)
 
-    # Optional fields
     product_text = f"Product: {product}" if product else ""
     price_text = f"Price: {price}" if price else ""
 
@@ -90,9 +98,9 @@ Make it feel like Burger King x {campaign_context}.
 """
 
     # =========================
-    # MULTI SEGMENT MODE
+    # MULTI SEGMENT MODE (2 options per segment)
     # =========================
-    if segment == "Todos" and channel == "push":
+    if segment == "Todos":
         segments = ["Reactivación", "Churned", "New", "Retained"]
 
         seg_prompt = ""
@@ -101,7 +109,7 @@ Make it feel like Burger King x {campaign_context}.
             seg_prompt += f"""
 SEGMENT: {seg}
 CRM objective: {intent}
-Write copy adapted to this lifecycle stage.
+Write TWO distinct copy options for this lifecycle stage.
 """
 
         prompt = f"""
@@ -115,7 +123,8 @@ Expressions: {expressions}
 Allowed emojis: {emojis}
 
 Channel: {channel}
-Rules: {format_rules}
+Channel rules (STRICT):
+{format_rules}
 
 Campaign type: {campaign_type}
 {theme_block}
@@ -123,36 +132,68 @@ Campaign type: {campaign_type}
 {product_text}
 {price_text}
 
-Generate push copy for EACH segment below.
+Generate TWO (2) copy options for EACH segment below, following the channel format strictly.
 
 {seg_prompt}
 
 Output EXACT format:
 
 Segment: Reactivación
+Option 1:
 Title:
 Body:
+CTA:
+Option 2:
+Title:
+Body:
+CTA:
 
 Segment: Churned
+Option 1:
 Title:
 Body:
+CTA:
+Option 2:
+Title:
+Body:
+CTA:
 
 Segment: New
+Option 1:
 Title:
 Body:
+CTA:
+Option 2:
+Title:
+Body:
+CTA:
 
 Segment: Retained
+Option 1:
 Title:
 Body:
+CTA:
+Option 2:
+Title:
+Body:
+CTA:
+
+Important:
+- If channel is push: do NOT include CTA lines (omit them).
+- If channel is slideup: do NOT include Body lines (omit them).
+- If channel is inapp: include Title, Body, CTA.
 """
     else:
-        # SINGLE SEGMENT
+        # =========================
+        # SINGLE SEGMENT MODE (3 options)
+        # =========================
         segment_block = ""
-        if segment:
+        if segment and segment != "Todos":
             intent = segment_intent(segment)
             segment_block = f"""
 User segment: {segment}
 CRM objective: {intent}
+Adapt tone and persuasion to lifecycle stage.
 """
 
         prompt = f"""
@@ -168,7 +209,8 @@ Allowed emojis: {emojis}
 {segment_block}
 
 Channel: {channel}
-Rules: {format_rules}
+Channel rules (STRICT):
+{format_rules}
 
 Campaign type: {campaign_type}
 {theme_block}
@@ -178,18 +220,12 @@ Campaign type: {campaign_type}
 
 Write EXACTLY {n} copy options.
 
-Format each:
-Option 1:
-Title:
-Body:
-
-Option 2:
-Title:
-Body:
-
-Option 3:
-Title:
-Body:
+Output rules:
+- Start each option with "Option 1:", "Option 2:", "Option 3:"
+- Use labels exactly: Title:, Body:, CTA:
+- If channel is push: do NOT include CTA lines.
+- If channel is slideup: do NOT include Body lines. CTA max 3 words.
+- If channel is inapp: include Title, Body, CTA.
 """
 
     response = client.responses.create(
@@ -200,46 +236,69 @@ Body:
     return response.output_text
 
 # =========================
-# PARSER NORMAL OPTIONS
+# HELPERS & PARSERS
 # =========================
-def parse_options(text):
-    pattern = r"Option\s+[123]:.*?(?=Option\s+[123]:|$)"
-    matches = re.findall(pattern, text, re.DOTALL)
+def _extract_line(block: str, label: str):
+    m = re.search(rf"{label}:\s*(.*)", block, flags=re.IGNORECASE)
+    return m.group(1).strip() if m else ""
+
+def parse_options(text: str):
+    pattern = r"(Option\s+[123]:)(.*?)(?=(Option\s+[123]:)|\Z)"
+    matches = re.findall(pattern, text, flags=re.DOTALL | re.IGNORECASE)
 
     options = []
     for m in matches:
-        title = re.search(r"Title:\s*(.*)", m)
-        body = re.search(r"Body:\s*(.*)", m)
-        cta = re.search(r"CTA:\s*(.*)", m)
-
+        block = (m[0] + m[1]).strip()
         options.append({
-            "title": title.group(1).strip() if title else "",
-            "body": body.group(1).strip() if body else "",
-            "cta": cta.group(1).strip() if cta else "",
+            "title": _extract_line(block, "Title"),
+            "body": _extract_line(block, "Body"),
+            "cta": _extract_line(block, "CTA"),
+            "raw": block
         })
+
+    if not options:
+        options = [{"title": "", "body": "", "cta": "", "raw": text.strip()}]
 
     return options
 
-# =========================
-# PARSER SEGMENTS
-# =========================
-def parse_segments(text):
+def parse_segment_options(text: str):
+    """
+    Expected structure:
+    Segment: X
+      Option 1:
+        Title:
+        Body:
+        CTA:
+      Option 2:
+        ...
+    """
     segments = ["Reactivación", "Churned", "New", "Retained"]
     results = {}
 
     for seg in segments:
-        pattern = rf"Segment:\s*{seg}.*?(?=Segment:|$)"
-        match = re.search(pattern, text, re.DOTALL)
+        seg_pattern = rf"Segment:\s*{re.escape(seg)}.*?(?=Segment:|\Z)"
+        seg_match = re.search(seg_pattern, text, flags=re.DOTALL | re.IGNORECASE)
+        if not seg_match:
+            continue
 
-        if match:
-            block = match.group(0)
-            title = re.search(r"Title:\s*(.*)", block)
-            body = re.search(r"Body:\s*(.*)", block)
+        seg_block = seg_match.group(0)
 
-            results[seg] = {
-                "title": title.group(1).strip() if title else "",
-                "body": body.group(1).strip() if body else "",
+        # Extract Option 1 block
+        opt1_match = re.search(r"Option\s*1:\s*(.*?)(?=Option\s*2:|\Z)", seg_block, flags=re.DOTALL | re.IGNORECASE)
+        opt2_match = re.search(r"Option\s*2:\s*(.*?)(?=\Z)", seg_block, flags=re.DOTALL | re.IGNORECASE)
+
+        def parse_opt(opt_text):
+            return {
+                "title": _extract_line(opt_text, "Title"),
+                "body": _extract_line(opt_text, "Body"),
+                "cta": _extract_line(opt_text, "CTA"),
+                "raw": opt_text.strip()
             }
+
+        opt1 = parse_opt(opt1_match.group(1)) if opt1_match else {"title": "", "body": "", "cta": "", "raw": ""}
+        opt2 = parse_opt(opt2_match.group(1)) if opt2_match else {"title": "", "body": "", "cta": "", "raw": ""}
+
+        results[seg] = [opt1, opt2]
 
     return results
 
@@ -252,12 +311,11 @@ st.title("🍔 BK CRM Copy Generator")
 country = st.selectbox("País", ["Chile", "Argentina"])
 channel = st.selectbox("Canal", ["push", "inapp", "slideup"])
 
-segment = None
-if channel == "push":
-    segment = st.selectbox(
-        "Segmento usuario",
-        ["Todos", "Reactivación", "Churned", "New", "Retained"]
-    )
+# Keep individual selection always available ✅
+segment = st.selectbox(
+    "Segmento usuario",
+    ["Todos", "Reactivación", "Churned", "New", "Retained"]
+)
 
 campaign_type = st.selectbox(
     "Tipo campaña",
@@ -269,7 +327,7 @@ campaign_type = st.selectbox(
         "Estreno serie/película",
         "Colaboración / licencia",
         "Fecha especial",
-        "Seasonal",
+        "Seasonal (temporal)",
         "Tráfico app",
         "Engagement",
         "Branding",
@@ -277,9 +335,9 @@ campaign_type = st.selectbox(
     ]
 )
 
-campaign_context = st.text_input("Contexto campaña")
-product = st.text_input("Producto (opcional)")
-price = st.text_input("Precio (opcional)")
+campaign_context = st.text_input("Contexto campaña (ej: Stranger Things, Navidad, Welcome to Derry, 2x1 combos)")
+product = st.text_input("Producto (opcional)", "")
+price = st.text_input("Precio (opcional)", "")
 
 if st.button("Generar copys"):
     with st.spinner("Generando..."):
@@ -290,31 +348,43 @@ if st.button("Generar copys"):
             campaign_context,
             product,
             price,
-            segment=segment
+            segment=segment,
+            n=3
         )
 
     st.subheader("Resultados")
+    fields = channel_fields(channel)
 
-    # =========================
-    # MULTI SEGMENT DISPLAY
-    # =========================
-    if segment == "Todos" and channel == "push":
-        segs = parse_segments(result)
+    if segment == "Todos":
+        segs = parse_segment_options(result)
 
-        for seg, data in segs.items():
-            with st.container(border=True):
-                st.markdown(f"### {seg}")
-                st.markdown(f"**Title:** {data['title']}")
-                st.markdown(f"**Body:** {data['body']}")
+        if not segs:
+            st.warning("No se pudo parsear por segmentos. Mira la salida raw abajo.")
+        else:
+            for seg, opts in segs.items():
+                with st.container(border=True):
+                    st.markdown(f"## {seg}")
+                    for idx, opt in enumerate(opts, start=1):
+                        st.markdown(f"### Opción {idx}")
+                        if fields["title"] and opt["title"]:
+                            st.markdown(f"**Title:** {opt['title']}")
+                        if fields["body"] and opt["body"]:
+                            st.markdown(f"**Body:** {opt['body']}")
+                        if fields["cta"] and opt["cta"]:
+                            st.markdown(f"**CTA:** {opt['cta']}")
     else:
         options = parse_options(result)
-
         for i, opt in enumerate(options, start=1):
             with st.container(border=True):
                 st.markdown(f"### Opción {i}")
-                if opt["title"]:
+                if fields["title"] and opt["title"]:
                     st.markdown(f"**Title:** {opt['title']}")
-                if opt["body"]:
+                if fields["body"] and opt["body"]:
                     st.markdown(f"**Body:** {opt['body']}")
-                if opt["cta"]:
+                if fields["cta"] and opt["cta"]:
                     st.markdown(f"**CTA:** {opt['cta']}")
+                if not (opt["title"] or opt["body"] or opt["cta"]):
+                    st.text(opt["raw"])
+
+    with st.expander("Ver salida completa (raw)"):
+        st.text(result)
