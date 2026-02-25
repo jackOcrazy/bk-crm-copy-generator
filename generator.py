@@ -8,6 +8,23 @@ with open("brand_packs/bk_brand_pack.json", "r", encoding="utf-8") as f:
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# =========================
+# SEGMENT INTENT
+# =========================
+def segment_intent(segment):
+    if segment == "Reactivación":
+        return "User inactive >9 weeks. Goal: bring back with craving and nostalgia."
+    if segment == "Churned":
+        return "User cooling (5–9 weeks). Goal: remind value and trigger return."
+    if segment == "New":
+        return "Registered but never ordered. Goal: first purchase motivation."
+    if segment == "Retained":
+        return "Active last 4 weeks. Goal: maintain frequency and loyalty."
+    return ""
+
+# =========================
+# GENERATE COPY
+# =========================
 def generate_bk_copy(
     country,
     channel,
@@ -16,6 +33,7 @@ def generate_bk_copy(
     product="",
     price="",
     objective="promo",
+    segment=None,
     n=5
 ):
     brand = brand_pack["brand"]
@@ -26,6 +44,19 @@ def generate_bk_copy(
 
     channel_rules = brand_pack["channels"][channel]
     regional = brand_pack["regional_adaptation"][country]
+
+    # Segment block
+    segment_block = ""
+    if segment:
+        intent = segment_intent(segment)
+        segment_block = f"""
+User segment: {segment}
+
+CRM objective:
+{intent}
+
+Adapt tone and persuasion to this lifecycle stage.
+"""
 
     prompt = f"""
 You are a CRM copywriter for {brand} in {country}.
@@ -40,13 +71,15 @@ Regional style: {regional['style']}, energy {regional['energy']}
 Channel: {channel}
 Rules: {channel_rules}
 
+{segment_block}
+
 Campaign type: {campaign_type}
 Campaign name: {campaign_name}
 Product: {product}
 Price: {price}
 Objective: {objective}
 
-Generate {n} CRM copy options following brand voice and channel rules.
+Generate {n} CRM copy options following brand voice, channel rules and lifecycle intent.
 Return each option on a new line.
 """
 
@@ -65,7 +98,8 @@ if __name__ == "__main__":
         campaign_type="promo",
         product="Combo Crispy",
         price="$4.990",
-        objective="promo"
+        objective="promo",
+        segment="Reactivación"
     )
 
     print(result)
